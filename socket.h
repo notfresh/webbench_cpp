@@ -36,7 +36,7 @@ int Socket(const char *host, int clientPort)
     memset(&ad, 0, sizeof(ad));
     ad.sin_family = AF_INET;
 
-    inaddr = inet_addr(host);
+    inaddr = inet_addr(host); // 将一个点分十进制的IP字符串转化为网络字节序二进制位对应的无符号整型。
     if (inaddr != INADDR_NONE)
         memcpy(&ad.sin_addr, &inaddr, sizeof(inaddr));
     else

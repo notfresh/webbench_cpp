@@ -16,7 +16,7 @@
 * 
 */ 
 
-#include "socket.c"
+#include "socket.h" // 没有看错，是include
 #include <unistd.h>
 #include <sys/param.h>
 #include <rpc/types.h>
@@ -24,6 +24,7 @@
 #include <strings.h>
 #include <time.h>
 #include <signal.h>
+#include <thread>
 
 /* values */
 volatile int timerexpired=0;
@@ -32,26 +33,33 @@ int failed=0;
 int bytes=0;
 
 /* globals */
-int http10=1; /* 0 - http/0.9, 1 - http/1.0, 2 - http/1.1 */
+// http的版本 @http
+/* 0 - http/0.9, 1 - http/1.0, 2 - http/1.1
+ * 问题是： 这版本之间有什么区别呢？
+ *
+ * */
+int http10=1;
+
 /* Allow: GET, HEAD, OPTIONS, TRACE */
 #define METHOD_GET 0
 #define METHOD_HEAD 1
 #define METHOD_OPTIONS 2
 #define METHOD_TRACE 3
 #define PROGRAM_VERSION "1.5"
+
 int method=METHOD_GET;
-int clients=1;
+int clients=1; // 这是一个整数
 int force=0;
 int force_reload=0;
 int proxyport=80;
 char *proxyhost=NULL;
-int benchtime=30;
+int benchtime=30; // 默认执行30秒
 
 /* internal */
 int mypipe[2];
 char host[MAXHOSTNAMELEN];
-#define REQUEST_SIZE 2048
-char request[REQUEST_SIZE];
+#define REQUEST_SIZE 2048 // 一个请求 2K 字节啊
+char request[REQUEST_SIZE]; // 这是一个字符串数组啊，神奇，也就是一个字符串咯
 
 static const struct option long_options[]=
 {
@@ -215,20 +223,24 @@ int main(int argc, char *argv[])
     return bench();
 }
 
+//@b
+// 根据参数行命令建立一个Http请求，并将http请求放入到全局数据request中。
 void build_request(const char *url)
 {
     char tmp[10];
     int i;
-
     //bzero(host,MAXHOSTNAMELEN);
     //bzero(request,REQUEST_SIZE);
     memset(host,0,MAXHOSTNAMELEN);
     memset(request,0,REQUEST_SIZE);
-
     if(force_reload && proxyhost!=NULL && http10<1) http10=1;
     if(method==METHOD_HEAD && http10<1) http10=1;
     if(method==METHOD_OPTIONS && http10<2) http10=2;
     if(method==METHOD_TRACE && http10<2) http10=2;
+
+    /*
+     *
+     * */
 
     switch(method)
     {
@@ -258,24 +270,34 @@ void build_request(const char *url)
     }
     
     /* protocol/host delimiter */
-    i=strstr(url,"://")-url+3;
+    i=strstr(url,"://")-url+3; //举个例子， http://www.baidu.com, 现在等于www的下标
+    printf("%d\n",i);
 
+
+    printf("strchr: %s\n", strchr(url+i,'/'));
+    printf("hahah\n");
     if(strchr(url+i,'/')==NULL) {
         fprintf(stderr,"\nInvalid URL syntax - hostname don't ends with '/'.\n");
         exit(2);
     }
+
+    printf("@proxy %s\n", proxyhost);
     
     if(proxyhost==NULL)
     {
+    	printf("@1: %s\n", index(url+i,':'));
+		printf("@2: %s\n", index(url+i,'/'));
         /* get port from hostname */
-        if(index(url+i,':')!=NULL && index(url+i,':')<index(url+i,'/'))
+        if(index(url+i,':')!=NULL && index(url+i,':')<index(url+i,'/')) // i就是 baidu.com的下标
         {
             strncpy(host,url+i,strchr(url+i,':')-url-i);
             //bzero(tmp,10);
             memset(tmp,0,10);
             strncpy(tmp,index(url+i,':')+1,strchr(url+i,'/')-index(url+i,':')-1);
             /* printf("tmp=%s\n",tmp); */
+			printf("the @port 1: %s ", tmp);
             proxyport=atoi(tmp);
+            printf("the @port %d ", proxyport);
             if(proxyport==0) proxyport=80;
         } 
         else
@@ -296,10 +318,11 @@ void build_request(const char *url)
     else if (http10==2)
         strcat(request," HTTP/1.1");
   
-    strcat(request,"\r\n");
+    strcat(request,"\r\n"); // 拼接换行符
   
     if(http10>0)
         strcat(request,"User-Agent: WebBench "PROGRAM_VERSION"\r\n");
+
     if(proxyhost==NULL && http10>0)
     {
         strcat(request,"Host: ");
@@ -329,13 +352,14 @@ static int bench(void)
     FILE *f;
 
     /* check avaibility of target server */
+	// step（1）: 首先测试TCP连接是否合法；
     i=Socket(proxyhost==NULL?host:proxyhost,proxyport);
     if(i<0) { 
         fprintf(stderr,"\nConnect to server failed. Aborting benchmark.\n");
         return 1;
     }
     close(i);
-    
+	// step2 (2）:调用pipe建立管道；
     /* create pipe */
     if(pipe(mypipe))
     {
@@ -355,7 +379,7 @@ static int bench(void)
     for(i=0;i<clients;i++)
     {
         pid=fork();
-        if(pid <= (pid_t) 0)
+        if(pid <= (pid_t) 0) // TODO
         {
             /* child process or error*/
             sleep(1); /* make childs faster */
@@ -380,8 +404,7 @@ static int bench(void)
 
         /* write results to pipe */
         f=fdopen(mypipe[1],"w");
-        if(f==NULL)
-        {
+        if(f==NULL){
             perror("open pipe for writing failed.");
             return 3;
         }
@@ -409,7 +432,7 @@ static int bench(void)
         while(1)
         {
             pid=fscanf(f,"%d %d %d",&i,&j,&k);
-            if(pid<2)
+            if(pid<2) // 只有至多一个进程了
             {
                 fprintf(stderr,"Some of our childrens died.\n");
                 break;
@@ -435,6 +458,7 @@ static int bench(void)
     return i;
 }
 
+//@b2
 void benchcore(const char *host,const int port,const char *req)
 {
     int rlen;
@@ -451,12 +475,9 @@ void benchcore(const char *host,const int port,const char *req)
     alarm(benchtime); // after benchtime,then exit
 
     rlen=strlen(req);
-    nexttry:while(1)
-    {
-        if(timerexpired)
-        {
-            if(failed>0)
-            {
+    nexttry:while(1){
+        if(timerexpired){
+            if(failed>0){
                 /* fprintf(stderr,"Correcting failed by signal\n"); */
                 failed--;
             }
@@ -464,31 +485,31 @@ void benchcore(const char *host,const int port,const char *req)
         }
         
         s=Socket(host,port);                          
-        if(s<0) { failed++;continue;} 
+        if(s<0) {failed++;continue;}
         if(rlen!=write(s,req,rlen)) {failed++;close(s);continue;}
         if(http10==0) 
         if(shutdown(s,1)) { failed++;close(s);continue;}
-        if(force==0) 
-        {
-            /* read all available data from socket */
-            while(1)
-            {
+
+        if(force==0){ /* read all available data from socket */
+            while(1){
                 if(timerexpired) break; 
                 i=read(s,buf,1500);
-                /* fprintf(stderr,"%d\n",i); */
-                if(i<0) 
-                { 
-                    failed++;
-                    close(s);
-                    goto nexttry;
-                }
-                else
-                if(i==0) break;
-                else
-                bytes+=i;
+				/* fprintf(stderr,"%d\n",i); */
+				if(i<0) {
+					failed++;
+					close(s);
+					goto nexttry;
+				} else if(i==0) break;
+				else{
+					bytes+=i;
+				}
             }
         }
-        if(close(s)) {failed++;continue;}
+
+        if(close(s)) { /* 连接提前断开，这里有点看不懂 */
+        	failed++;
+        	continue;
+        }
         speed++;
-    }
+    }// nexttry end
 }

@@ -1,5 +1,5 @@
 CFLAGS?=	-Wall -ggdb -W -O
-CC?=		gcc
+CC?=		g++
 LIBS?=
 LDFLAGS?=
 PREFIX?=	/usr/local/webbench
@@ -42,6 +42,6 @@ tar:   clean
 	ln -sf debian/changelog $(TMPDIR)/ChangeLog
 	-cd $(TMPDIR) && cd .. && tar cozf webbench-$(VERSION).tar.gz webbench-$(VERSION)
 
-webbench.o:	webbench.c socket.c Makefile
+webbench.o:	webbench.c socket.h Makefile
 
 .PHONY: clean install all tar
