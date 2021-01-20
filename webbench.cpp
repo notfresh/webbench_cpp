@@ -25,6 +25,8 @@
 #include <time.h>
 #include <signal.h>
 #include <thread>
+#include <string>
+#include <iostream>
 
 /* values */
 volatile int timerexpired=0;
@@ -45,7 +47,8 @@ int http10=1;
 #define METHOD_HEAD 1
 #define METHOD_OPTIONS 2
 #define METHOD_TRACE 3
-#define PROGRAM_VERSION "1.5"
+
+const char* PROGRAM_VERSION = "1.5";
 
 int method=METHOD_GET;
 int clients=1; // 这是一个整数
@@ -133,7 +136,7 @@ int main(int argc, char *argv[])
             case '9': http10=0;break;
             case '1': http10=1;break;
             case '2': http10=2;break;
-            case 'V': printf(PROGRAM_VERSION"\n");exit(0);
+            case 'V': printf("%s\n", PROGRAM_VERSION);exit(0);
             case 't': benchtime=atoi(optarg);break;	     
             case 'p': 
             /* proxy server parsing server:port */
@@ -172,7 +175,7 @@ int main(int argc, char *argv[])
     if(benchtime==0) benchtime=30;
  
     /* Copyright */
-    fprintf(stderr,"Webbench - Simple Web Benchmark "PROGRAM_VERSION"\n"
+    fprintf(stderr, "Webbench - Simple Web Benchmark %s %s \n", PROGRAM_VERSION,
             "Copyright (c) Radim Kolar 1997-2004, GPL Open Source Software.\n"
             );
  
@@ -320,8 +323,12 @@ void build_request(const char *url)
   
     strcat(request,"\r\n"); // 拼接换行符
   
-    if(http10>0)
-        strcat(request,"User-Agent: WebBench "PROGRAM_VERSION"\r\n");
+    if(http10>0){
+		strcat(request,"User-Agent: WebBench" );
+		strcat(request,  PROGRAM_VERSION );
+		strcat(request, "\r\n" );
+    }
+
 
     if(proxyhost==NULL && http10>0)
     {

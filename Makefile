@@ -1,5 +1,5 @@
 CFLAGS?=	-Wall -ggdb -W -O
-CC?=		g++
+CC?= 	g++ -std=c++11
 LIBS?=
 LDFLAGS?=
 PREFIX?=	/usr/local/webbench
@@ -8,8 +8,13 @@ TMPDIR=/tmp/webbench-$(VERSION)
 
 all:   webbench tags
 
-tags:  *.c
-	-ctags *.c
+webbench: webbench.o Makefile
+	$(CC) $(CFLAGS) $(LDFLAGS) -o webbench webbench.o $(LIBS)
+
+webbench.o:	webbench.cpp socket.h Makefile
+
+tags:  *.cpp
+	-ctags *.cpp
 
 install: webbench
 	install -d $(DESTDIR)$(PREFIX)/bin
@@ -25,8 +30,6 @@ install: webbench
 	install -m 644 debian/copyright $(DESTDIR)$(PREFIX)/share/doc/webbench
 	install -m 644 debian/changelog $(DESTDIR)$(PREFIX)/share/doc/webbench
 
-webbench: webbench.o Makefile
-	$(CC) $(CFLAGS) $(LDFLAGS) -o webbench webbench.o $(LIBS) 
 
 clean:
 	-rm -f *.o webbench *~ core *.core tags
@@ -42,6 +45,5 @@ tar:   clean
 	ln -sf debian/changelog $(TMPDIR)/ChangeLog
 	-cd $(TMPDIR) && cd .. && tar cozf webbench-$(VERSION).tar.gz webbench-$(VERSION)
 
-webbench.o:	webbench.c socket.h Makefile
 
 .PHONY: clean install all tar
