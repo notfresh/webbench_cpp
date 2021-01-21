@@ -5,4 +5,6 @@ project(webbench VERSION 1.5)
 set(CMAKE_CXX_STANDARD  11)
 set(CMAKE_CXX_STANDARD_REQUIRED  True)
 
-add_executable(webbench webbench.cpp)
+add_executable(webbench.cpp)
+
+add_executable(build_request.cpp)
