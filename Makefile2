@@ -1,0 +1,3 @@
+wb2: main.cpp build_request.cpp
+	g++ -o wb2 main.cpp build_request.cpp  # 已经在其他位置配置了 alias g++=g++ -std=c++11
+

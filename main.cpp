@@ -10,46 +10,39 @@
 #include <cstdio>
 #include <cstdlib>
 
-#define METHOD_GET 0
-#define METHOD_HEAD 1
-#define METHOD_OPTIONS 2
-#define METHOD_TRACE 3
-int method=METHOD_GET;
+#include "socket.h"
 
-int force=0;
-int force_reload=0;
-int http10=1;
-
-int proxyport=80;
-char *proxyhost=NULL;
-int benchtime=30; // 默认执行30秒
-const char* PROGRAM_VERSION = "1.5";
-
-int clients=1; // 这是一个整数
+bench_request bench_req;
 
 static const struct option long_options[]=
-		{
-				{"force",no_argument,&force,1},
-				{"reload",no_argument,&force_reload,1},
-				{"time",required_argument,NULL,'t'},
-				{"help",no_argument,NULL,'?'},
-				{"http09",no_argument,NULL,'9'},
-				{"http10",no_argument,NULL,'1'},
-				{"http11",no_argument,NULL,'2'},
-				{"get",no_argument,&method,METHOD_GET},
-				{"head",no_argument,&method,METHOD_HEAD},
-				{"options",no_argument,&method,METHOD_OPTIONS},
-				{"trace",no_argument,&method,METHOD_TRACE},
-				{"version",no_argument,NULL,'V'},
-				{"proxy",required_argument,NULL,'p'},
-				{"clients",required_argument,NULL,'c'},
-				{NULL,0,NULL,0}
-		};
+{
+		{"force",no_argument,& bench_req.force,1},
+		{"reload",no_argument,& bench_req.force_reload,1},
+		{"time",required_argument,NULL,'t'},
+		{"help",no_argument,NULL,'?'},
+		{"http09",no_argument,NULL,'9'},
+		{"http10",no_argument,NULL,'1'},
+		{"http11",no_argument,NULL,'2'},
+		{"get",no_argument,& bench_req.method,METHOD_GET},
+		{"head",no_argument,& bench_req.method,METHOD_HEAD},
+		{"options",no_argument,& bench_req.method,METHOD_OPTIONS},
+		{"trace",no_argument,& bench_req.method,METHOD_TRACE},
+		{"version",no_argument,NULL,'V'},
+		{"proxy",required_argument,NULL,'p'},
+		{"clients",required_argument,NULL,'c'},
+		{NULL,0,NULL,0}
+};
 
+//
 void usage(void);
-
+//// 外部的三个方法
+void build_request(bench_request *req);
+int bench(bench_request* req);
+void f1(char* chars);
 int main(int argc, char *argv[]){
-	char *tmp=NULL;
+	bench_req.proxyport = 80;
+	bench_req.clients = 1;
+	bench_req.method=METHOD_GET;
 	if(argc==1)
 	{
 		usage();
@@ -58,78 +51,97 @@ int main(int argc, char *argv[]){
 
 	int opt=0;
 	int options_index=0;
-	while((opt=getopt_long(argc,argv,"912Vfrt:p:c:?h",long_options,&options_index))!=EOF )
-	{
-		switch(opt)
-		{
-			case  0 : break;
-			case 'f': force=1;break;
-			case 'r': force_reload=1;break;
-			case '9': http10=0;break;
-			case '1': http10=1;break;
-			case '2': http10=2;break;
-			case 'V': printf("%s\n", PROGRAM_VERSION);exit(0);
-			case 't': benchtime=atoi(optarg);break;
+	char* tmp;
+	while((opt=getopt_long(argc,argv,"912Vfrt:p:c:?h",long_options,&options_index))!=EOF ){
+		switch(opt){
+			case 'c':
+				bench_req.clients=atoi(optarg);
+				break;
+			case  0 :
+				break;
+			case 'f':
+				bench_req.force=1;
+				break;
+			case 'r':
+				bench_req.force_reload=1;
+				break;
+			case '9':
+				bench_req.http10=0;
+				break;
+			case '1':
+				bench_req.http10=1;
+				break;
+			case '2':
+				bench_req.http10=2;
+				break;
+			case 'V':
+				printf("%s\n", PROGRAM_VERSION);
+				exit(0);
+			case 't':
+				bench_req.benchtime=atoi(optarg);
+				break;
 			case 'p':
 				/* proxy server parsing server:port */
 				tmp=strrchr(optarg,':');
-				proxyhost=optarg;
-				if(tmp==NULL)
-				{
+				bench_req.proxyhost=optarg;
+				if(tmp==NULL){
 					break;
 				}
-				if(tmp==optarg)
-				{￿
+				if(tmp==optarg){
 					fprintf(stderr,"Error in option --proxy %s: Missing hostname.\n",optarg);
 					return 2;
 				}
-				if(tmp==optarg+strlen(optarg)-1)
-				{
-					printf("@tmp: %s", tmp);
+				if(tmp==optarg+strlen(optarg)-1){
 					fprintf(stderr,"Error in option --proxy %s Port number is missing.\n",optarg);
 					return 2;
 				}
-				*tmp='\0'; // 正常取到port了
-				proxyport=atoi(tmp+1);break;
+				*tmp='\0'; // 截断proxyhost和proxyport
+				bench_req.proxyport=atoi(tmp+1);
+				printf("\nproxy host: %s, proxy port: %d\n", bench_req.proxyhost, bench_req.proxyport );
+				break;
 			case ':':
 			case 'h':
-			case '?': usage();return 2;break;
-			case 'c': clients=atoi(optarg);break;
+			case '?':
+				usage();
+				return 2;
+				break;// 为了语法通过，加的break,其实根本没用
 		}
 	}
 
 	if(optind==argc) {
 		fprintf(stderr,"webbench: Missing URL!\n");
-//		usage();
+		usage();
 		printf("usage ");
 		return 2;
 	}
 
-	if(clients==0) clients=1;
-	if(benchtime==0) benchtime=30;
+	if(bench_req.clients==0) bench_req.clients=1;
+	if(bench_req.benchtime==0) bench_req.benchtime=30;
 
 	/* Copyright */
 	fprintf(stderr, "Webbench - Simple Web Benchmark %s %s \n", PROGRAM_VERSION,
 			"Copyright (c) Radim Kolar 1997-2004, GPL Open Source Software.\n"
 	);
+	bench_req.url = argv[optind];
+    build_request(&bench_req); // 构建请求体
+	f1("abcd");
 
-//    build_request(argv[optind]);
 	printf("Runing info: ");
 
-	if(clients==1)
+	if(bench_req.clients==1)
 		printf("1 client");
 	else
-		printf("%d clients",clients);
+		printf("%d clients",bench_req.clients);
 
-	printf(", running %d sec", benchtime);
+	printf(", running %d sec", bench_req.benchtime);
 
-	if(force) printf(", early socket close");
-	if(proxyhost!=NULL) printf(", via proxy server %s:%d",proxyhost,proxyport);
-	if(force_reload) printf(", forcing reload");
+	if(bench_req.force) printf(", early socket close");
+	if(bench_req.proxyhost!=NULL) printf(", via proxy server %s:%d",bench_req.proxyhost,bench_req.proxyport);
+	if(bench_req.force_reload) printf(", forcing reload");
 
 	printf(".\n");
-	return 0;
-//    return bench();
+//	return 0;
+    return bench(&bench_req);
 }
 
 
@@ -153,3 +165,4 @@ void usage(void)
 			"  -V|--version             Display program version.\n"
 	);
 }
+

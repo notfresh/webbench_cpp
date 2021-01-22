@@ -11,7 +11,7 @@ webbench (1.4) unstable; urgency=low
   * use yield() when waiting for test start
   * corrected error codes
   * check availability of test server first
-  * do not abort test if first request failed
+  * do not abort test if first request_str failed
   * report when some childrens are dead.
   * use alarm, not time() for lower syscal use by bench
   * use mode 644 for installed doc

@@ -1,119 +1,1 @@
-#include <string>
-#include <zxlib/using_std.h>
-
-using namespace std;
-const char* PROGRAM_VERSION = "1.5";
-
-string request; // REQUEST_SIZE= 2048; // 一个请求 2K 字节啊
-string host;
-int proxyport=80;
-int http10=1;
-
-enum method_t { METHOD_GET, METHOD_HEAD, METHOD_OPTIONS, METHOD_TRACE };
-method_t method = METHOD_GET;
-int force_reload = 0;
-string proxyhost ;
-
-
-// 根据参数行命令建立一个Http请求，并将http请求放入到全局数据request中。
-void build_request(const char *url){
-	string url_str(url);
-	// 这坨代码什么意思呢？
-	if(force_reload && proxyhost!="" && http10<1) http10=1;
-	if(method==METHOD_HEAD && http10<1) http10=1;
-	if(method==METHOD_OPTIONS && http10<2) http10=2;
-	if(method==METHOD_TRACE && http10<2) http10=2;
-
-	switch(method)
-	{
-		default:
-		case METHOD_GET: request.append("GET");break;
-		case METHOD_HEAD: request.append("HEAD");break;
-		case METHOD_OPTIONS: request.append("OPTIONS");break;
-		case METHOD_TRACE: request.append("TRACE");break;
-	}
-
-	request.append(" ");
-
-	if(url_str.find("://") == -1){
-		cerr << "\n" << url_str << ": is not a valid URL." << endl;
-		exit(2);
-	}
-	if(url_str.size()>1500){
-		cerr << "URL is too long." << endl;
-		exit(2);
-	}
-	if ( url_str.substr(0,7) != "http://"){
-		cerr << "Only HTTP protocol is directly supported, set --proxy for others." << endl;
-		exit(2);
-	}
-
-	/* protocol/host delimiter */
-	int i=url_str.find("://")+3; //举个例子， http://www.baidu.com, 现在等于www的下标
-
-
-	if(url_str.find('/', i)==-1) {
-		cerr << "Invalid URL syntax - hostname don't ends with '/'." << endl;
-		exit(2);
-	}
-
-	cout << "@proxy" << proxyhost << endl;
-
-	if(proxyhost == ""){
-		/* http://www.jianshu.com/ */
-		int port_start = url_str.find(":", i);
-		int uri_start = url_str.find("/", i);
-		if(port_start != -1 && port_start < uri_start) // i就是 baidu.com的下标
-		{
-			host = url_str.substr(i, port_start-i);
-			string port = url_str.substr(port_start+1, uri_start-port_start-1);
-			proxyport=stoi(port);
-			cout << "host: " << host << ", port: " << port << endl;
-			if(proxyport==0) proxyport=80;
-		}
-		else{
-			host = url_str.substr(i, uri_start-i);
-		}
-		request.append(url_str.substr(uri_start));
-	}
-	else{
-		// printf("ProxyHost=%s\nProxyPort=%d\n",proxyhost,proxyport);
-		request.append(url_str);
-	}
-
-	if(http10==1)
-		request.append(" HTTP/1.0");
-	else if (http10==2)
-		request.append(" HTTP/1.1");
-	request.append("\r\n"); // 拼接换行符
-
-	if(http10>0){
-		request.append(string("User-Agent: WebBench") + PROGRAM_VERSION + "\r\n" );
-	}
-
-	if(proxyhost=="" && http10>0){
-		request.append(string("Host: ") + host + "\r\n");
-	}
-
-	if(force_reload && proxyhost!=""){
-		request.append("Pragma: no-cache\r\n");
-	}
-
-	if(http10>1)
-		request.append("Connection: close\r\n");
-
-	/* add empty line at end */
-	if(http10>0) request.append("\r\n");
-
-	cout << "\nRequest:\n" << request << endl;
-}
-
-int test_buid_request(){
-	char* url = "http://www.jianshu.com/";
-	build_request(url);
-	cout << host << endl;
-}
-
-int main(){
-	test_buid_request();
-}
+#include <string>#include <iostream>#include "socket.h"using namespace std;// 根据参数行命令建立一个Http请求，并将http请求放入到全局数据request中。void build_request(bench_request* req){	string url_str(req->url);	int http10 = req->http10;	char* proxyhost = req->proxyhost;	printf("proxy: %s\n", proxyhost);	int method = req->method;	printf("method: %d\n", method);	printf("@0: %d\n", 0);	int proxyport = req->proxyport;	printf("@1: %d\n", 1);	int force_reload = req->force_reload;	printf("@2: %d\n", 2);	string host;	printf("@3: %d\n", 3);	string request_str;	printf("@4: %d\n", 3);	char* request = req->request;	printf("@5: %d\n", 3);	// 设置请求方法	switch(method){		default:		case METHOD_GET: request_str.append("GET");break;		case METHOD_HEAD: request_str.append("HEAD");break;		case METHOD_OPTIONS: request_str.append("OPTIONS");break;		case METHOD_TRACE: request_str.append("TRACE");break;	}	request_str.append(" ");	if(url_str.find("://") == -1){		cerr << "\n" << url_str << ": is not a valid URL." << endl;		exit(2);	}	if(url_str.size()>1500){		cerr << "URL is too long." << endl;		exit(2);	}	if ( url_str.substr(0,7) != "http://"){		cerr << "Only HTTP protocol is directly supported, set --proxy for others." << endl;		exit(2);	}	/* protocol/host delimiter */	int i=url_str.find("://")+3; //举个例子， http://www.baidu.com, 现在等于www的下标	if(url_str.find('/', i)==-1) {		cerr << "Invalid URL syntax - hostname don't ends with '/'." << endl;		exit(2);	}	if(!proxyhost){		/* http://www.jianshu.com/ */		int port_start = url_str.find(":", i);		int uri_start = url_str.find("/", i);		if(port_start != -1 && port_start < uri_start){ // i就是 baidu.com的下标			host = url_str.substr(i, port_start-i);			string port = url_str.substr(port_start+1, uri_start-port_start-1);			proxyport=stoi(port);			cout << "host: " << host << ", port: " << port << endl;			if(proxyport==0) proxyport=80;		}		else{			host = url_str.substr(i, uri_start-i);		}		request_str.append(url_str.substr(uri_start)); // 去掉主机域名，直接带本机uri	}	else{		// printf("ProxyHost=%s\nProxyPort=%d\n",proxyhost,proxyport);		request_str.append(url_str); // 有代理，带上完整url	}	// 设置http版本	if(force_reload && proxyhost && http10<1) http10=1;	if(method==METHOD_HEAD && http10<1) http10=1;	if(method==METHOD_OPTIONS && http10<2) http10=2;	if(method==METHOD_TRACE && http10<2) http10=2;	if(http10==1)		request_str.append(" HTTP/1.0");	else if (http10==2)		request_str.append(" HTTP/1.1");	request_str.append("\r\n"); // 拼接换行符	// 设置 User-Agent 行	if(http10>0){		request_str.append(string("User-Agent: WebBench") + PROGRAM_VERSION + "\r\n" );	}	if(!proxyhost && http10>0){		request_str.append(string("Host: ") + host + "\r\n");	}	if(force_reload && !proxyhost){		request_str.append("Pragma: no-cache\r\n");	}	if(http10>1)		request_str.append("Connection: close\r\n");	/* add empty line at end */	if(http10>0) request_str.append("\r\n");	req->request =const_cast<char *>(request_str.c_str()) ;	req->host = const_cast<char *>(host.c_str()) ;	req->proxyport = proxyport;	cout << "\nRequest:\n" << request_str << endl;}//void test_buid_request(){	bench_request req;//	req.proxyhost="127.0.0.1:5000";	req.url = "http://www.jianshu.com/";	build_request(&req);	cout << req.request << endl;}////int main(){//	test_buid_request();//}//void f1(char* chars){	cout << "***************************" << endl;	cout << chars << endl;}

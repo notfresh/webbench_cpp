@@ -16,7 +16,7 @@
 * 
 */ 
 
-#include "socket.h" // 没有看错，是include
+
 #include <unistd.h>
 #include <sys/param.h>
 #include <rpc/types.h>
@@ -26,6 +26,8 @@
 #include <signal.h>
 #include <string>
 #include <iostream>
+#include <sys/socket.h>
+#include "socket2.h"
 
 /* values */
 volatile int timerexpired=0;
@@ -40,17 +42,15 @@ int bytes=0;
  *
  * */
 int http10=1;
-
+char* PROGRAM_VERSION = "1.5";
 /* Allow: GET, HEAD, OPTIONS, TRACE */
 #define METHOD_GET 0
 #define METHOD_HEAD 1
 #define METHOD_OPTIONS 2
 #define METHOD_TRACE 3
+
+
 int method=METHOD_GET;
-
-const char* PROGRAM_VERSION = "1.5";
-
-
 int clients=1; // 这是一个整数
 int force=0;
 int force_reload=0;
@@ -62,136 +62,10 @@ int benchtime=30; // 默认执行30秒
 int mypipe[2];
 char host[MAXHOSTNAMELEN];
 #define REQUEST_SIZE 2048 // 一个请求 2K 字节啊
-char request[REQUEST_SIZE]; // 这是一个字符串数组啊，神奇，也就是一个字符串咯
+char request_str[REQUEST_SIZE]; // 这是一个字符串数组啊，神奇，也就是一个字符串咯
 
 using namespace std;
 string request2(REQUEST_SIZE, 0);
-
-
-// 根据参数行命令建立一个Http请求，并将http请求放入到全局数据request中。
-void build_request(const char *url)
-{
-	char tmp[10];
-	int i;
-	//bzero(host,MAXHOSTNAMELEN);
-	//bzero(request,REQUEST_SIZE);
-	memset(host,0,MAXHOSTNAMELEN);
-	memset(request,0,REQUEST_SIZE);
-	if(force_reload && proxyhost!=NULL && http10<1) http10=1;
-	if(method==METHOD_HEAD && http10<1) http10=1;
-	if(method==METHOD_OPTIONS && http10<2) http10=2;
-	if(method==METHOD_TRACE && http10<2) http10=2;
-
-	/*
-	 *
-	 * */
-
-	switch(method)
-	{
-		default:
-		case METHOD_GET: strcpy(request,"GET");break;
-		case METHOD_HEAD: strcpy(request,"HEAD");break;
-		case METHOD_OPTIONS: strcpy(request,"OPTIONS");break;
-		case METHOD_TRACE: strcpy(request,"TRACE");break;
-	}
-
-	strcat(request," ");
-
-	if(NULL==strstr(url,"://"))
-	{
-		fprintf(stderr, "\n%s: is not a valid URL.\n",url);
-		exit(2);
-	}
-	if(strlen(url)>1500)
-	{
-		fprintf(stderr,"URL is too long.\n");
-		exit(2);
-	}
-	if (0!=strncasecmp("http://",url,7))
-	{
-		fprintf(stderr,"\nOnly HTTP protocol is directly supported, set --proxy for others.\n");
-		exit(2);
-	}
-
-	/* protocol/host delimiter */
-	i=strstr(url,"://")-url+3; //举个例子， http://www.baidu.com, 现在等于www的下标
-	printf("%d\n",i);
-
-
-	printf("strchr: %s\n", strchr(url+i,'/'));
-	printf("hahah\n");
-	if(strchr(url+i,'/')==NULL) {
-		fprintf(stderr,"\nInvalid URL syntax - hostname don't ends with '/'.\n");
-		exit(2);
-	}
-
-	printf("@proxy %s\n", proxyhost);
-
-	if(proxyhost==NULL)
-	{
-		printf("@1: %s\n", index(url+i,':'));
-		printf("@2: %s\n", index(url+i,'/'));
-		/* get port from hostname */
-		if(index(url+i,':')!=NULL && index(url+i,':')<index(url+i,'/')) // i就是 baidu.com的下标
-		{
-			strncpy(host,url+i,strchr(url+i,':')-url-i);
-			//bzero(tmp,10);
-			memset(tmp,0,10);
-			strncpy(tmp,index(url+i,':')+1,strchr(url+i,'/')-index(url+i,':')-1);
-			/* printf("tmp=%s\n",tmp); */
-			printf("the @port 1: %s ", tmp);
-			proxyport=atoi(tmp);
-			printf("the @port %d ", proxyport);
-			if(proxyport==0) proxyport=80;
-		}
-		else
-		{
-			strncpy(host,url+i,strcspn(url+i,"/"));
-		}
-		// printf("Host=%s\n",host);
-		strcat(request+strlen(request),url+i+strcspn(url+i,"/"));
-	}
-	else
-	{
-		// printf("ProxyHost=%s\nProxyPort=%d\n",proxyhost,proxyport);
-		strcat(request,url);
-	}
-
-	if(http10==1)
-		strcat(request," HTTP/1.0");
-	else if (http10==2)
-		strcat(request," HTTP/1.1");
-
-	strcat(request,"\r\n"); // 拼接换行符
-
-	if(http10>0){
-		strcat(request,"User-Agent: WebBench" );
-		strcat(request,  PROGRAM_VERSION );
-		strcat(request, "\r\n" );
-	}
-
-
-	if(proxyhost==NULL && http10>0)
-	{
-		strcat(request,"Host: ");
-		strcat(request,host);
-		strcat(request,"\r\n");
-	}
-
-	if(force_reload && proxyhost!=NULL)
-	{
-		strcat(request,"Pragma: no-cache\r\n");
-	}
-
-	if(http10>1)
-		strcat(request,"Connection: close\r\n");
-
-	/* add empty line at end */
-	if(http10>0) strcat(request,"\r\n");
-
-	printf("\nRequest:\n%s\n",request);
-}
-
 
 static const struct option long_options[]=
 {
@@ -227,17 +101,17 @@ static void usage(void)  // "912Vfrt:p:c:?h"
     fprintf(stderr,
             "webbench [option]... URL\n"
             "  -f|--force               Don't wait for reply from server.\n"
-            "  -r|--reload              Send reload request - Pragma: no-cache.\n"
+            "  -r|--reload              Send reload request_str - Pragma: no-cache.\n"
             "  -t|--time <sec>          Run benchmark for <sec> seconds. Default 30.\n"
-            "  -p|--proxy <server:port> Use proxy server for request.\n"
+            "  -p|--proxy <server:port> Use proxy server for request_str.\n"
             "  -c|--clients <n>         Run <n> HTTP clients at once. Default one.\n"
             "  -9|--http09              Use HTTP/0.9 style requests.\n"
             "  -1|--http10              Use HTTP/1.0 protocol.\n"
             "  -2|--http11              Use HTTP/1.1 protocol.\n"
-            "  --get                    Use GET request method.\n"
-            "  --head                   Use HEAD request method.\n"
-            "  --options                Use OPTIONS request method.\n"
-            "  --trace                  Use TRACE request method.\n"
+            "  --get                    Use GET request_str method.\n"
+            "  --head                   Use HEAD request_str method.\n"
+            "  --options                Use OPTIONS request_str method.\n"
+            "  --trace                  Use TRACE request_str method.\n"
             "  -?|-h|--help             This information.\n"
             "  -V|--version             Display program version.\n"
            );
@@ -310,7 +184,7 @@ int main(int argc, char *argv[])
  
     build_request(argv[optind]);
  
-    // print request info ,do it in function build_request
+    // print request_str info ,do it in function build_request
     /*printf("Benchmarking: ");
  
     switch(method)
@@ -351,10 +225,135 @@ int main(int argc, char *argv[])
     if(force_reload) printf(", forcing reload");
     
     printf(".\n");
-    
+//    return 0;
     return bench();
 }
 
+
+// 根据参数行命令建立一个Http请求，并将http请求放入到全局数据request中。
+void build_request(const char *url)
+{
+	char tmp[10];
+	int i;
+	//bzero(host,MAXHOSTNAMELEN);
+	//bzero(request_str,REQUEST_SIZE);
+	memset(host,0,MAXHOSTNAMELEN);
+	memset(request_str, 0, REQUEST_SIZE);
+	if(force_reload && proxyhost!=NULL && http10<1) http10=1;
+	if(method==METHOD_HEAD && http10<1) http10=1;
+	if(method==METHOD_OPTIONS && http10<2) http10=2;
+	if(method==METHOD_TRACE && http10<2) http10=2;
+
+	/*
+	 *
+	 * */
+
+	switch(method)
+	{
+		default:
+		case METHOD_GET: strcpy(request_str, "GET");break;
+		case METHOD_HEAD: strcpy(request_str, "HEAD");break;
+		case METHOD_OPTIONS: strcpy(request_str, "OPTIONS");break;
+		case METHOD_TRACE: strcpy(request_str, "TRACE");break;
+	}
+
+	strcat(request_str, " ");
+
+	if(NULL==strstr(url,"://"))
+	{
+		fprintf(stderr, "\n%s: is not a valid URL.\n",url);
+		exit(2);
+	}
+	if(strlen(url)>1500)
+	{
+		fprintf(stderr,"URL is too long.\n");
+		exit(2);
+	}
+	if (0!=strncasecmp("http://",url,7))
+	{
+		fprintf(stderr,"\nOnly HTTP protocol is directly supported, set --proxy for others.\n");
+		exit(2);
+	}
+
+	/* protocol/host delimiter */
+	i=strstr(url,"://")-url+3; //举个例子， http://www.baidu.com, 现在等于www的下标
+	printf("%d\n",i);
+
+
+	printf("strchr: %s\n", strchr(url+i,'/'));
+	printf("hahah\n");
+	if(strchr(url+i,'/')==NULL) {
+		fprintf(stderr,"\nInvalid URL syntax - hostname don't ends with '/'.\n");
+		exit(2);
+	}
+
+	printf("@proxy %s\n", proxyhost);
+
+	if(proxyhost==NULL)
+	{
+		printf("@1: %s\n", index(url+i,':'));
+		printf("@2: %s\n", index(url+i,'/'));
+		/* get port from hostname */
+		if(index(url+i,':')!=NULL && index(url+i,':')<index(url+i,'/')) // i就是 baidu.com的下标
+		{
+			strncpy(host,url+i,strchr(url+i,':')-url-i);
+			//bzero(tmp,10);
+			memset(tmp,0,10);
+			strncpy(tmp,index(url+i,':')+1,strchr(url+i,'/')-index(url+i,':')-1);
+			/* printf("tmp=%s\n",tmp); */
+			printf("the @port 1: %s ", tmp);
+			proxyport=atoi(tmp);
+			printf("the @port %d ", proxyport);
+			if(proxyport==0) proxyport=80;
+		}
+		else
+		{
+			strncpy(host,url+i,strcspn(url+i,"/"));
+		}
+		// printf("Host=%s\n",host);
+		strcat(request_str + strlen(request_str), url + i + strcspn(url + i, "/"));
+	}
+	else
+	{
+		 printf("@ProxyHost=%s\nProxyPort=%d\n",proxyhost,proxyport);
+		strcat(request_str, url);
+		printf("@request_url\n:%s", request_str);
+	}
+
+	if(http10==1)
+		strcat(request_str, " HTTP/1.0");
+	else if (http10==2)
+		strcat(request_str, " HTTP/1.1");
+
+	strcat(request_str, "\r\n"); // 拼接换行符
+
+	if(http10>0){
+		strcat(request_str, "User-Agent: WebBench" );
+		strcat(request_str, PROGRAM_VERSION );
+		strcat(request_str, "\r\n" );
+	}
+
+
+	if(proxyhost==NULL && http10>0)
+	{
+		strcat(request_str, "Host: ");
+		strcat(request_str, host);
+		strcat(request_str, "\r\n");
+	}
+
+	if(force_reload && proxyhost!=NULL)
+	{
+		strcat(request_str, "Pragma: no-cache\r\n");
+	}
+
+	if(http10>1)
+		strcat(request_str, "Connection: close\r\n");
+
+	/* add empty line at end */
+	if(http10>0) strcat(request_str, "\r\n");
+
+	printf("\nRequest:\n%s\n", request_str);
+}
 
 /* vraci system rc error kod */
 static int bench(void)
@@ -410,9 +409,9 @@ static int bench(void)
     {
         /* I am a child */
         if(proxyhost==NULL)
-            benchcore(host,proxyport,request);
+            benchcore(host, proxyport, request_str);
         else
-            benchcore(proxyhost,proxyport,request);
+            benchcore(proxyhost, proxyport, request_str);
 
         /* write results to pipe */
         f=fdopen(mypipe[1],"w");
@@ -471,8 +470,7 @@ static int bench(void)
 }
 
 //@b2
-void benchcore(const char *host,const int port,const char *req)
-{
+void benchcore(const char *host,const int port,const char *req){
     int rlen;
     char buf[1500];
     int s,i;

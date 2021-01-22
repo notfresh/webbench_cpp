@@ -35,7 +35,7 @@
 -.TP
 -.B \-f, \-\-force
 -Do not wait for any response from server. Close connection after
--request is send. This option produce quite a good denial of service
+-request_str is send. This option produce quite a good denial of service
 -attack.
 -.TP
 -.B \-9, \-\-http09
@@ -59,20 +59,20 @@
 -seconds. Default value is 30.
 -.TP
 -.B \-p, \-\-proxy <server:port>
--Send request via proxy server. Needed for supporting others protocols
+-Send request_str via proxy server. Needed for supporting others protocols
 -than HTTP.
 -.TP
 -.B \-\-get
--Use GET request method.
+-Use GET request_str method.
 -.TP
 -.B \-\-head
--Use HEAD request method.
+-Use HEAD request_str method.
 -.TP
 -.B \-\-options
--Use OPTIONS request method.
+-Use OPTIONS request_str method.
 -.TP
 -.B \-\-trace
--Use TRACE request method.
+-Use TRACE request_str method.
 -.TP
 -.B \-c, \-\-clients <n>
 -Use

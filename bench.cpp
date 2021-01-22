@@ -16,7 +16,6 @@
 * 
 */ 
 
-//#include "socket.h" // 没有看错，是include
 #include <unistd.h>
 #include <sys/param.h>
 #include <rpc/types.h>
@@ -26,6 +25,9 @@
 #include <signal.h>
 #include <string>
 #include <iostream>
+#include <sys/socket.h>
+
+#include "socket.h" // 没有看错，是include
 
 /* globals */
 // http的版本 @http
@@ -36,25 +38,30 @@
 
 /* internal */
 
-static void benchcore(const char* host,const int port, const char *request);
-static int bench(void);
-static void alarm_handler(int signal)
-{
-    timerexpired=1;
-}
-
 volatile int timerexpired=0;
 int speed=0;
 int failed=0;
 int bytes=0;
-
 int mypipe[2];
-int clients=1; // 这是并发请求客户端的数量
-static int bench(void)
+
+void benchcore(char* host, int port , bench_request* benchreq);
+static void alarm_handler(int signal)
 {
+	timerexpired=1;
+}
+
+
+int bench(bench_request* req){
     int i,j,k;
     pid_t pid=0;
     FILE *f;
+	int clients = req->clients;
+    char* host = req->host;
+	char* proxyhost = req->proxyhost;
+	int proxyport = req->proxyport;
+	char* request = req->request;
+	int benchtime = req->benchtime;
+	int force = req->force;
 
     /* check avaibility of target server */
 	// step（1）: 首先测试TCP连接是否合法；
@@ -72,17 +79,8 @@ static int bench(void)
         return 3;
     }
 
-    /* not needed, since we have alarm() in childrens */
-    /* wait 4 next system clock tick */
-    /*
-    cas=time(NULL);
-    while(time(NULL)==cas)
-    sched_yield();
-    */
-
     /* fork childs */
-    for(i=0;i<clients;i++)
-    {
+    for(i=0;i<clients;i++){
         pid=fork();
         if(pid <= (pid_t) 0) // TODO
         {
@@ -92,20 +90,18 @@ static int bench(void)
         }
     }
 
-    if( pid < (pid_t) 0)
-    {
+    if( pid < (pid_t) 0){
         fprintf(stderr,"problems forking worker no. %d\n",i);
         perror("fork failed.");
         return 3;
     }
 
-    if(pid == (pid_t) 0)
-    {
+    if(pid == (pid_t) 0){
         /* I am a child */
         if(proxyhost==NULL) // 启用代理
-            benchcore(host,proxyport,request);
+            benchcore(host,proxyport,req); // 把request发给代理或者目标主机， request本身就带host
         else
-            benchcore(proxyhost,proxyport,request);
+            benchcore(proxyhost,proxyport,req);
 
         /* write results to pipe */
         f=fdopen(mypipe[1],"w");
@@ -161,14 +157,17 @@ static int bench(void)
 
     return i;
 }
-//
 
-
-void benchcore(const char *host,const int port,const char *req){
+void benchcore(char* host, int port , bench_request* benchreq){
     int rlen;
     char buf[1500];
     int s,i;
     struct sigaction sa;
+
+    int force = benchreq->force;
+	char *req =  benchreq->request;
+	int benchtime = benchreq->benchtime;
+	int http10 = benchreq->http10;
 
     /* setup alarm signal handler */
     sa.sa_handler=alarm_handler;
